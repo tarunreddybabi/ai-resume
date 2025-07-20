@@ -6,7 +6,7 @@ import ATS from "~/components/ATS";
 import Details from "~/components/Details";
 
 export const meta = () => ([
-    { title: 'Resumind | Review ' },
+    { title: 'LakshyaMargam | Review ' },
     { name: 'description', content: 'Detailed overview of your resume' },
 ])
 
@@ -18,9 +18,9 @@ const Resume = () => {
     const [feedback, setFeedback] = useState<Feedback | null>(null);
     const navigate = useNavigate();
 
-    useEffect(() => {
-        if(!isLoading && !auth.isAuthenticated) navigate(`/auth?next=/resume/${id}`);
-    }, [isLoading])
+    // useEffect(() => {
+    //     if(!isLoading && !auth.isAuthenticated) navigate(`/auth?next=/resume/${id}`);
+    // }, [isLoading])
 
     useEffect(() => {
         const loadResume = async () => {

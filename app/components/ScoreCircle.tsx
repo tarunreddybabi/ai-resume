@@ -14,7 +14,6 @@ const ScoreCircle = ({ score = 75 }: { score: number }) => {
                 viewBox="0 0 100 100"
                 className="transform -rotate-90"
             >
-                {/* Background circle */}
                 <circle
                     cx="50"
                     cy="50"
@@ -43,7 +42,6 @@ const ScoreCircle = ({ score = 75 }: { score: number }) => {
                 />
             </svg>
 
-            {/* Score and issues */}
             <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="font-semibold text-sm">{`${score}/100`}</span>
             </div>
