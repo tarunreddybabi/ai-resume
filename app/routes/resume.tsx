@@ -4,6 +4,7 @@ import { usePuterStore } from "~/lib/puter";
 import Summary from "~/components/Summary";
 import ATS from "~/components/ATS";
 import Details from "~/components/Details";
+import { ResumeFileGenerator } from "~/lib/fileGenerator";
 
 export const meta = () => [
   { title: "LakshyaMargam | Review " },
@@ -16,6 +17,7 @@ const Resume = () => {
   const [imageUrl, setImageUrl] = useState("");
   const [resumeUrl, setResumeUrl] = useState("");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [fileMetadata, setFileMetadata] = useState<FileMetadata | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationSuccess, setGenerationSuccess] = useState<string | null>(
@@ -24,9 +26,10 @@ const Resume = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isLoading && !auth.isAuthenticated)
+    if (!isLoading && !auth.isAuthenticated) {
       navigate(`/auth?next=/resume/${id}`);
-  }, [isLoading]);
+    }
+  }, [isLoading, auth, id, navigate]);
 
   useEffect(() => {
     const loadResume = async () => {
@@ -36,7 +39,6 @@ const Resume = () => {
 
         const data = JSON.parse(resume);
 
-        // Load PDF resume
         const resumeBlob = await fs.read(data.resumePath);
         if (resumeBlob) {
           const pdfBlob = new Blob([resumeBlob], { type: "application/pdf" });
@@ -44,15 +46,23 @@ const Resume = () => {
           setResumeUrl(resumeUrl);
         }
 
-        // Load resume image
         const imageBlob = await fs.read(data.imagePath);
         if (imageBlob) {
           const imageUrl = URL.createObjectURL(imageBlob);
           setImageUrl(imageUrl);
         }
 
+        if (data.fileMetadata) {
+          setFileMetadata(data.fileMetadata);
+        } else {
+          setFileMetadata({
+            originalMimeType: "application/pdf",
+            originalExtension: "pdf",
+            originalFilename: "resume.pdf",
+          });
+        }
+
         setFeedback(data.feedback);
-        console.log({ resumeUrl, imageUrl, feedback: data.feedback });
       } catch (error) {
         console.error("Error loading resume:", error);
       }
@@ -69,19 +79,21 @@ const Resume = () => {
       return;
     }
 
+    if (!fileMetadata) {
+      setGenerationError("File metadata not available");
+      return;
+    }
+
     setIsGenerating(true);
     setGenerationError(null);
     setGenerationSuccess(null);
 
     try {
       const resume = await kv.get(`resume:${id}`);
-      if (!resume) {
-        throw new Error("Resume data not found");
-      }
+      if (!resume) throw new Error("Resume data not found");
 
       const data = JSON.parse(resume);
 
-      // Generate updated resume using Puter AI
       const result = await ai.generateUpdatedResume({
         originalResume: data.rawText,
         jobDescription: data.jd,
@@ -92,117 +104,20 @@ const Resume = () => {
       });
 
       if (result.success && result.updatedResumeContent) {
-        // Create downloadable file
-        const blob = new Blob([result.updatedResumeContent], {
-          type: "text/plain",
+        ResumeFileGenerator.createPreviewWindow(
+          result.updatedResumeContent,
+          data.companyName
+        );
+
+        await ResumeFileGenerator.generateAndDownload({
+          resumeContent: result.updatedResumeContent,
+          companyName: data.companyName,
+          fileMetadata: fileMetadata,
         });
-        const updatedResumeUrl = URL.createObjectURL(blob);
-
-        // Open in new tab for preview
-        const newWindow = window.open();
-        if (newWindow) {
-          newWindow.document.write(`
-            <html>
-              <head>
-                <title>Updated Resume - ${
-                  data.companyName || "Optimized"
-                }</title>
-                <style>
-                  body {
-                    font-family: Arial, sans-serif;
-                    max-width: 800px;
-                    margin: 0 auto;
-                    padding: 20px;
-                    line-height: 1.6;
-                    background: #f5f5f5;
-                  }
-                  .resume-container {
-                    background: white;
-                    padding: 40px;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                    margin: 20px 0;
-                  }
-                  .download-bar {
-                    background: #007bff;
-                    color: white;
-                    padding: 15px;
-                    text-align: center;
-                    position: sticky;
-                    top: 0;
-                    z-index: 100;
-                  }
-                  .download-btn {
-                    background: white;
-                    color: #007bff;
-                    border: none;
-                    padding: 8px 16px;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    margin: 0 10px;
-                    font-weight: bold;
-                  }
-                  .download-btn:hover {
-                    background: #f8f9fa;
-                  }
-                  pre {
-                    white-space: pre-wrap;
-                    font-family: 'Georgia', serif;
-                    font-size: 14px;
-                    line-height: 1.5;
-                  }
-                </style>
-              </head>
-              <body>
-                <div class="download-bar">
-                  <span>✨ Your Updated Resume is Ready! </span>
-                  <button class="download-btn" onclick="downloadResume()">📄 Download as TXT</button>
-                  <button class="download-btn" onclick="window.print()">🖨️ Print/Save as PDF</button>
-                </div>
-                <div class="resume-container">
-                  <pre>${result.updatedResumeContent
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")}</pre>
-                </div>
-                <script>
-                  function downloadResume() {
-                    const element = document.createElement('a');
-                    const file = new Blob([\`${result.updatedResumeContent.replace(
-                      /`/g,
-                      "\\`"
-                    )}\`], {type: 'text/plain'});
-                    element.href = URL.createObjectURL(file);
-                    element.download = 'updated_resume_${
-                      data.companyName?.replace(/[^a-zA-Z0-9]/g, "_") ||
-                      "optimized"
-                    }.txt';
-                    document.body.appendChild(element);
-                    element.click();
-                    document.body.removeChild(element);
-                  }
-                </script>
-              </body>
-            </html>
-          `);
-          newWindow.document.close();
-        }
-
-        // Also trigger direct download
-        const downloadLink = document.createElement("a");
-        downloadLink.href = updatedResumeUrl;
-        downloadLink.download = `updated_resume_${
-          data.companyName?.replace(/[^a-zA-Z0-9]/g, "_") || "optimized"
-        }.txt`;
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
-
-        // Clean up the URL
-        setTimeout(() => URL.revokeObjectURL(updatedResumeUrl), 1000);
 
         setGenerationSuccess(
-          `✅ Updated resume generated successfully! ${
-            result.savedPath ? `Saved to: ${result.savedPath}` : ""
+          `✅ Updated resume generated successfully in ${fileMetadata.originalExtension.toUpperCase()} format! ${
+            result.savedPath ? `Also saved to: ${result.savedPath}` : ""
           }`
         );
       } else {
@@ -220,7 +135,6 @@ const Resume = () => {
     }
   };
 
-  // Cleanup URLs on unmount
   useEffect(() => {
     return () => {
       if (imageUrl) URL.revokeObjectURL(imageUrl);
@@ -238,6 +152,7 @@ const Resume = () => {
           </span>
         </Link>
       </nav>
+
       <div className="flex flex-row w-full max-lg:flex-col-reverse">
         <section className="feedback-section bg-[url('/images/bg-small.svg')] bg-cover h-[100vh] sticky top-0 items-center justify-center">
           {imageUrl && resumeUrl && (
@@ -253,6 +168,7 @@ const Resume = () => {
             </div>
           )}
         </section>
+
         <section className="feedback-section">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-4xl !text-black font-bold">Resume Review</h2>
@@ -300,12 +216,11 @@ const Resume = () => {
             <div className="flex flex-col gap-8 animate-in fade-in duration-1000">
               <Summary feedback={feedback} />
               <ATS
-                score={feedback.ATS.score || 0}
-                suggestions={feedback.ATS.tips || []}
+                score={feedback.ATS?.score || 0}
+                suggestions={feedback.ATS?.tips || []}
               />
               <Details feedback={feedback} />
 
-              {/* Updated Resume Preview Section */}
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border border-blue-200">
                 <h3 className="text-lg font-semibold text-blue-800 mb-4 flex items-center gap-2">
                   <span>🎯</span>

@@ -49,3 +49,9 @@ interface Feedback {
         }[];
     };
 }
+
+interface FileMetadata {
+  originalMimeType: string;
+  originalExtension: string;
+  originalFilename: string;
+}

@@ -391,71 +391,63 @@ export const usePuterStore = create<PuterStore>((set, get) => {
         additionalInstructions,
       } = options;
 
-      const resumePrompt = `
-You are an expert resume writer and ATS optimization specialist. I need you to create an improved, optimized version of the provided resume based on the job description and detailed feedback analysis.
+      const resumePrompt = 
+        `**Role:** Professional resume writer and formatter
+        **Objective:** Given a user's original resume text, job description, company name, and feedback, generate a fully reformatted and revised resume text only, strictly in a clean resume format that can be inserted into PDF or Word document generation logic.
 
-**ORIGINAL RESUME:**
-${originalResume}
+        **Original Resume:**
+        ${originalResume}
 
-**TARGET JOB DESCRIPTION:**
-${jobDescription}
+        **Job Description:**
+        ${jobDescription}
 
-**COMPANY:** ${companyName || "Not specified"}
+        **Company:** ${companyName || "Not specified"}
+        DETAILED FEEDBACK ANALYSIS:**
+        - Overall Score: ${feedback.overallScore ?? "Not provided"}
+        - ATS Score: ${feedback.ATS?.score ?? "Not provided"}/100
+        - ATS Tips: ${JSON.stringify(feedback.ATS?.tips ?? [], null, 2)}
+        - Tone & Style Score: ${feedback.toneAndStyle?.score ?? "Not provided"}
+        - Tone & Style Tips: ${JSON.stringify(
+                feedback.toneAndStyle?.tips ?? [],
+                null,
+                2
+              )}
+        - Content Score: ${feedback.content?.score ?? "Not provided"}
+        - Content Tips: ${JSON.stringify(feedback.content?.tips ?? [], null, 2)}
+        - Structure Score: ${feedback.structure?.score ?? "Not provided"}
+        - Structure Tips: ${JSON.stringify(feedback.structure?.tips ?? [], null, 2)}
+        - Skills Score: ${feedback.skills?.score ?? "Not provided"}
+        - Skills Tips: ${JSON.stringify(feedback.skills?.tips ?? [], null, 2)}
 
-**DETAILED FEEDBACK ANALYSIS:**
-- Overall Score: ${feedback.overallScore ?? "Not provided"}
-- ATS Score: ${feedback.ATS?.score ?? "Not provided"}/100
-- ATS Tips: ${JSON.stringify(feedback.ATS?.tips ?? [], null, 2)}
-- Tone & Style Score: ${feedback.toneAndStyle?.score ?? "Not provided"}
-- Tone & Style Tips: ${JSON.stringify(
-        feedback.toneAndStyle?.tips ?? [],
-        null,
-        2
-      )}
-- Content Score: ${feedback.content?.score ?? "Not provided"}
-- Content Tips: ${JSON.stringify(feedback.content?.tips ?? [], null, 2)}
-- Structure Score: ${feedback.structure?.score ?? "Not provided"}
-- Structure Tips: ${JSON.stringify(feedback.structure?.tips ?? [], null, 2)}
-- Skills Score: ${feedback.skills?.score ?? "Not provided"}
-- Skills Tips: ${JSON.stringify(feedback.skills?.tips ?? [], null, 2)}
+        **Additional Instructions:** ${
+                additionalInstructions ||
+                "Focus on ATS optimization, keyword integration, and professional formatting"
+              }
 
-**ADDITIONAL REQUIREMENTS:**
-${
-  additionalInstructions ||
-  "Focus on ATS optimization, keyword integration, and professional formatting"
-}
+        **Instructions:**
+        1. Using the original resume and feedback, improve and rewrite the resume content to better align with the job description.
+        2. **Do not** include any prompt texts, system messages, explanations, or comments. Only output the resume content.
+        3. Keep the same structure, section order, and style typically found in resumes (e.g., Contact Info, Summary, Work Experience, Education, Skills).
+        4. Output this content so it can be directly used to generate a PDF or Word document.
+        5. Use bullet points with • symbol for experience items
+        6. Ensure proper spacing and formatting for professional appearance
+        7. Include quantified achievements where possible
+        8. Naturally integrate relevant keywords from job description
+        9. Maintain 1-2 page length appropriately
 
-**OPTIMIZATION INSTRUCTIONS:**
-1. **ATS Optimization:** Ensure the resume passes ATS systems with 85%+ compatibility
-2. **Keyword Integration:** Naturally incorporate relevant keywords from the job description
-3. **Structure & Formatting:** Use clean, professional formatting with clear sections
-4. **Quantify Achievements:** Add metrics and numbers where possible to strengthen impact
-5. **Tailor Content:** Customize the resume specifically for this role and company
-6. **Address Gaps:** Fill identified experience gaps with relevant skills/projects
-7. **Professional Language:** Use action verbs and industry-appropriate terminology
-8. **Length Optimization:** Keep it concise (1-2 pages) while including all important information
-
-**OUTPUT REQUIREMENTS:**
-- Provide ONLY the optimized resume content in clean, well-formatted text
-- Use standard resume sections: Header, Summary/Objective, Experience, Skills, Education, etc.
-- Include bullet points for experience using • symbol
-- Ensure consistent formatting throughout
-- Focus on readability and ATS compatibility
-- Do NOT include any explanations or additional text outside the resume content
-
-Generate the complete optimized resume now:`;
+        **Output:** Plain text representing the full updated resume content only.`;
 
       const aiResponse = (await puter.ai.chat(resumePrompt, {
         model: "claude-3-7-sonnet",
         max_tokens: 4000,
-        temperature: 0.3,
+        temperature: 0.2
       })) as AIResponse;
 
       if (!aiResponse || !aiResponse.message?.content) {
         throw new Error("Failed to generate resume content from AI");
       }
 
-      const updatedResumeContent =
+      let updatedResumeContent =
         typeof aiResponse.message.content === "string"
           ? aiResponse.message.content
           : aiResponse.message.content[0]?.text || "";
@@ -463,6 +455,8 @@ Generate the complete optimized resume now:`;
       if (!updatedResumeContent.trim()) {
         throw new Error("Generated resume content is empty");
       }
+
+      updatedResumeContent = cleanResumeOutput(updatedResumeContent);
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const filename = `updated_resume_${
@@ -472,7 +466,6 @@ Generate the complete optimized resume now:`;
 
       try {
         await puter.fs.write(filepath, updatedResumeContent);
-        console.log(`✅ Updated resume saved to: ${filepath}`);
       } catch (fsError) {
         console.warn("Failed to save updated resume to filesystem:", fsError);
       }
@@ -490,6 +483,27 @@ Generate the complete optimized resume now:`;
           error instanceof Error ? error.message : "Unknown error occurred",
       };
     }
+  };
+
+  const cleanResumeOutput = (content: string): string => {
+    const lines = content.split("\n");
+    const cleanedLines = lines.filter((line) => {
+      const trimmed = line.trim().toLowerCase();
+      if (
+        trimmed.startsWith("here is") ||
+        trimmed.startsWith("this is") ||
+        trimmed.startsWith("the updated") ||
+        trimmed.startsWith("based on") ||
+        trimmed.includes("i have") ||
+        trimmed.includes("as requested") ||
+        trimmed.includes("hope this helps")
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+    return cleanedLines.join("\n").trim();
   };
 
   const img2txt = async (image: string | File | Blob, testMode?: boolean) => {
